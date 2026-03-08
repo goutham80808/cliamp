@@ -1457,9 +1457,12 @@ function renderStationStats(data,stationKey){
     cEl.appendChild(div);
   });
 
-  /* globe */
-  window._radioCountries=countries;
-  initGlobe(countries);
+  /* globe — only init once */
+  if(!window._globeInitialized){
+    window._radioCountries=countries;
+    initGlobe(countries);
+    window._globeInitialized=true;
+  }
 }
 
 function renderRadioStats(){
