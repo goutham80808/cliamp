@@ -1504,6 +1504,10 @@ p:<span class="fn">on</span>(<span class="str">"track.change"</span>, <span clas
         <div class="radio-countries" id="radio-countries"></div>
       </div>
     </div>
+    <div class="radio-card">
+      <div class="radio-card-title">Top Countries</div>
+      <div class="radio-countries" id="radio-total-countries"></div>
+    </div>
     <div class="install-box" id="radio-cmd-box" onclick="copyCmd(this,'cliamp https://radio.cliamp.stream/lofi/stream.pls')" style="margin-top:28px;display:none">
       <span class="copied-msg">COPIED</span>
       <code><span class="prompt">$ </span><span id="radio-cmd-text">cliamp https://radio.cliamp.stream/lofi/stream.pls</span></code>
@@ -1638,10 +1642,11 @@ function formatDate(iso){
 function renderStationStats(data,stationKey){
   var station;
   if(stationKey==='total'){
-    station={total_sessions:0,total_listen_hours:0,active_listeners:0,top_countries:[],daily:[]};
+    station={total_sessions:0,total_listen_hours:0,active_listeners:0,top_countries:[],active_listener_countries:[],daily:[]};
     var allStations=data.stations||{};
     var dailyMap={};
-    var countryMap={};
+    var activeCountryMap={};
+    var totalCountryMap={};
     Object.keys(allStations).forEach(function(k){
       var s=allStations[k];
       station.total_sessions+=s.total_sessions||0;
@@ -1653,15 +1658,20 @@ function renderStationStats(data,stationKey){
         dailyMap[d.date].listen_hours+=d.listen_hours;
       });
       (s.active_listener_countries||[]).forEach(function(c){
-        if(!countryMap[c.country_code])countryMap[c.country_code]={country:c.country,country_code:c.country_code,sessions:0};
-        countryMap[c.country_code].sessions+=c.sessions;
+        if(!activeCountryMap[c.country_code])activeCountryMap[c.country_code]={country:c.country,country_code:c.country_code,sessions:0};
+        activeCountryMap[c.country_code].sessions+=c.sessions;
+      });
+      (s.top_countries||[]).forEach(function(c){
+        if(!totalCountryMap[c.country_code])totalCountryMap[c.country_code]={country:c.country,country_code:c.country_code,sessions:0};
+        totalCountryMap[c.country_code].sessions+=c.sessions;
       });
     });
     station.daily=Object.keys(dailyMap).sort().map(function(k){return dailyMap[k]});
-    station.top_countries=Object.keys(countryMap).map(function(k){return countryMap[k]}).sort(function(a,b){return b.sessions-a.sessions});
+    station.active_listener_countries=Object.keys(activeCountryMap).map(function(k){return activeCountryMap[k]}).sort(function(a,b){return b.sessions-a.sessions});
+    station.top_countries=Object.keys(totalCountryMap).map(function(k){return totalCountryMap[k]}).sort(function(a,b){return b.sessions-a.sessions});
   }else{
     station=data.stations&&data.stations[stationKey];
-    if(!station) station={total_sessions:0,total_listen_hours:0,active_listeners:0,top_countries:[],daily:[]};
+    if(!station) station={total_sessions:0,total_listen_hours:0,active_listeners:0,top_countries:[],active_listener_countries:[],daily:[]};
   }
 
   /* big numbers */
@@ -1700,11 +1710,11 @@ function renderStationStats(data,stationKey){
     labels.appendChild(lEnd);
   }
 
-  /* countries */
-  var countries=station.active_listener_countries||station.top_countries||[];
+  /* active listener countries */
+  var activeCountries=station.active_listener_countries||[];
   var cEl=document.getElementById("radio-countries");
   cEl.textContent="";
-  countries.forEach(function(c){
+  activeCountries.forEach(function(c){
     var flag=countryFlags[c.country_code]||"\uD83C\uDF10";
     var div=document.createElement("div");
     div.className="radio-country";
@@ -1720,10 +1730,30 @@ function renderStationStats(data,stationKey){
     cEl.appendChild(div);
   });
 
-  /* globe — only init once */
+  /* total sessions per country */
+  var totalCountries=station.top_countries||[];
+  var tEl=document.getElementById("radio-total-countries");
+  tEl.textContent="";
+  totalCountries.forEach(function(c){
+    var flag=countryFlags[c.country_code]||"\uD83C\uDF10";
+    var div=document.createElement("div");
+    div.className="radio-country";
+    var flagSpan=document.createElement("span");
+    flagSpan.className="radio-country-flag";
+    flagSpan.textContent=flag;
+    var sessSpan=document.createElement("span");
+    sessSpan.className="radio-country-sessions";
+    sessSpan.textContent=c.sessions;
+    div.appendChild(flagSpan);
+    div.appendChild(document.createTextNode(c.country));
+    div.appendChild(sessSpan);
+    tEl.appendChild(div);
+  });
+
+  /* globe — only init once, use total countries for markers */
   if(!window._globeInitialized){
-    window._radioCountries=countries;
-    initGlobe(countries);
+    window._radioCountries=totalCountries.length?totalCountries:activeCountries;
+    initGlobe(window._radioCountries);
     window._globeInitialized=true;
   }
 }
