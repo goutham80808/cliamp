@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CLIAMP — Terminal Music Player</title>
+<title>CLIAMP - Terminal Music Player</title>
 <meta name="description" content="A retro terminal music player inspired by Winamp 2.x. Play local files, YouTube, Spotify, Plex, Jellyfin, Navidrome, SoundCloud, and 30,000+ radio stations with a spectrum visualizer and 10-band EQ.">
 <style>
   /* ═══ RESET ═══════════════════════════════ */
@@ -802,7 +802,7 @@
   <span class="terminal-dot"></span>
   <span class="terminal-dot"></span>
   <span class="terminal-dot"></span>
-  <span class="terminal-title">cliamp &mdash; bash</span>
+  <span class="terminal-title">cliamp - bash</span>
 </div>
 
 <!-- ═══ NAV ═══ -->
@@ -827,7 +827,7 @@
     <div class="hero-title">CLIAMP<span class="hero-cursor"></span></div>
     <div class="hero-sub">terminal music player</div>
     <div class="hero-desc">
-      A retro music player inspired by <em>Winamp</em> &mdash; built for the terminal.<br>
+      A retro music player inspired by <em>Winamp</em>, built for the terminal.<br>
       Spectrum visualizer, 10-band EQ, playlists, streaming, and more.
     </div>
     <div class="visualizer">
@@ -978,7 +978,7 @@
       <div class="feature">
         <div class="feature-icon">&#9836;</div>
         <div class="feature-name">MPRIS / Media Keys</div>
-        <p>Linux desktop integration &mdash; control playback with hardware media keys and playerctl</p>
+        <p>Linux desktop integration. Control playback with hardware media keys and playerctl</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#9881;</div>
@@ -988,12 +988,12 @@
       <div class="feature">
         <div class="feature-icon">&#9000;</div>
         <div class="feature-name">Live Radio Metadata</div>
-        <p>ICY/Shoutcast metadata &mdash; see the current song title on internet radio streams</p>
+        <p>ICY/Shoutcast metadata. See the current song title on internet radio streams</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#9998;</div>
         <div class="feature-name">Embedded Tag Reading</div>
-        <p>ID3v2, Vorbis comments, and MP4 atoms &mdash; reads artist, album, genre, year, and track number</p>
+        <p>ID3v2, Vorbis comments, and MP4 atoms. Reads artist, album, genre, year, and track number</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#9654;</div>
@@ -1008,7 +1008,7 @@
       <div class="feature">
         <div class="feature-icon">&#9835;</div>
         <div class="feature-name">Spotify</div>
-        <p>Stream your Spotify Premium library &mdash; playlists, EQ, visualizer, and all effects apply. OAuth login with cached credentials</p>
+        <p>Stream your Spotify Premium library. Playlists, EQ, visualizer, and all effects apply. OAuth login with cached credentials</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#9654;</div>
@@ -1018,7 +1018,7 @@
       <div class="feature">
         <div class="feature-icon">&#9654;</div>
         <div class="feature-name">Plex</div>
-        <p>Stream music from your Plex Media Server. Browse albums and play directly &mdash; no extra software required</p>
+        <p>Stream music from your Plex Media Server. Browse albums and play directly. No extra software required</p>
       </div>
       <div class="feature">
         <div class="feature-icon">&#9654;</div>
@@ -1311,7 +1311,7 @@
         <div class="key-row"><kbd>F</kbd><span>Spotify search + add to playlist</span></div>
         <div class="key-row"><kbd>u</kbd><span>Load URL (stream/playlist)</span></div>
         <div class="key-row"><kbd>y</kbd><span>Show lyrics</span></div>
-        <div class="key-row"><kbd>J</kbd><span>Jump to time</span></div>
+        <div class="key-row"><kbd>Ctrl+J</kbd><span>Jump to time</span></div>
         <div class="key-row"><kbd>x</kbd><span>Expand playlist</span></div>
         <div class="key-row"><kbd>o</kbd><span>Open file browser</span></div>
         <div class="key-row"><kbd>a</kbd><span>Queue (play next)</span></div>
@@ -1343,7 +1343,7 @@
     <div class="section-label"><span class="label-text">plugins.lua</span></div>
     <p class="plugins-intro">
       Lua 5.1 plugin system. Hook into playback events, add custom visualizers, or push data to external services.
-      Each plugin runs in an isolated sandbox &mdash; a crash in one cannot affect others or the player.
+      Each plugin runs in an isolated sandbox. A crash in one cannot affect others or the player.
       Drop a <code>.lua</code> file in <span class="path">~/.config/cliamp/plugins/</span> and restart.
     </p>
 
@@ -1431,7 +1431,7 @@ p:<span class="fn">on</span>(<span class="str">"track.change"</span>, <span clas
       </div>
       <div class="plugin-api">
         <div class="plugin-api-name">http</div>
-        <p>HTTP client with <code>get()</code> and <code>post()</code> &mdash; JSON, form body, custom headers. 5s timeout</p>
+        <p>HTTP client with <code>get()</code> and <code>post()</code>. JSON, form body, custom headers. 5s timeout</p>
       </div>
       <div class="plugin-api">
         <div class="plugin-api-name">fs</div>
@@ -1481,15 +1481,15 @@ p:<span class="fn">on</span>(<span class="str">"track.change"</span>, <span clas
     <div id="radio-error"></div>
     <div class="radio-stats-row">
       <div class="radio-stat">
-        <div class="radio-stat-value"><span class="radio-stat-dot"></span><span id="radio-now">&mdash;</span></div>
+        <div class="radio-stat-value"><span class="radio-stat-dot"></span><span id="radio-now">-</span></div>
         <div class="radio-stat-label">listening now</div>
       </div>
       <div class="radio-stat">
-        <div class="radio-stat-value" id="radio-sessions">&mdash;</div>
+        <div class="radio-stat-value" id="radio-sessions">-</div>
         <div class="radio-stat-label">total sessions</div>
       </div>
       <div class="radio-stat">
-        <div class="radio-stat-value" id="radio-hours">&mdash;</div>
+        <div class="radio-stat-value" id="radio-hours">-</div>
         <div class="radio-stat-label">listen hours</div>
       </div>
     </div>
@@ -1699,7 +1699,7 @@ function renderStationStats(data,stationKey){
       bar.style.background=barColors[stationKey]||barColors.lofi;
       var tip=document.createElement("div");
       tip.className="tooltip";
-      tip.textContent=d.date+" \u2014 "+d.sessions+" sessions \u00B7 "+d.listen_hours.toFixed(1)+"h";
+      tip.textContent=d.date+" - "+d.sessions+" sessions, "+d.listen_hours.toFixed(1)+"h";
       bar.appendChild(tip);
       chart.appendChild(bar);
     });
@@ -1751,7 +1751,7 @@ function renderStationStats(data,stationKey){
     tEl.appendChild(div);
   });
 
-  /* globe — only init once */
+  /* globe - only init once */
   if(!window._globeInitialized){
     window._radioCountries=activeCountries;
     initGlobe(activeCountries);
@@ -1801,7 +1801,7 @@ var _globeAnim=null;
 var _globeResizeTimer=null;
 var _landPolygons=null;
 
-/* Minimal TopoJSON decoder — extracts rings from a topology object */
+/* Minimal TopoJSON decoder - extracts rings from a topology object */
 function topoToPolygons(topo,objectName){
   var obj=topo.objects[objectName];
   var arcs=topo.arcs;
