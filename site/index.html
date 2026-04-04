@@ -454,6 +454,31 @@
     margin-bottom:12px;margin-top:24px;
   }
   .plugin-events-title::before{content:"# ";color:var(--dim2);font-weight:400}
+  .community-plugins-title{
+    color:var(--fg-bright);font-size:13px;font-weight:600;
+    margin-bottom:12px;margin-top:32px;
+  }
+  .community-plugins-title::before{content:"# ";color:var(--dim2);font-weight:400}
+  .community-plugin{
+    display:flex;align-items:center;gap:12px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-left:2px solid var(--dim2);
+    padding:14px 16px;
+    transition:border-left-color .2s;
+    margin-bottom:6px;
+  }
+  .community-plugin:hover{border-left-color:var(--green)}
+  .community-plugin-name{
+    color:var(--green);font-size:12px;font-weight:600;
+    font-family:inherit;
+  }
+  .community-plugin-name a{color:inherit;text-decoration:none}
+  .community-plugin-name a:hover{text-decoration:underline}
+  .community-plugin-desc{font-size:11px;color:var(--dim);flex:1}
+  .community-plugin-author{font-size:10px;color:var(--dim2)}
+  .community-plugin-author a{color:var(--dim);text-decoration:none}
+  .community-plugin-author a:hover{color:var(--cyan)}
 
   /* ═══ TABLES (Keys / CLI / Remote) ════════════ */
   .table-intro{
@@ -1401,6 +1426,13 @@ p:<span class="fn">on</span>(<span class="str">"track.change"</span>, <span clas
         <div class="plugin-api-name">config</div>
         <p>Read per-plugin values from <code>[plugins.name]</code> in config.toml via <code>p:config(key)</code></p>
       </div>
+    </div>
+
+    <div class="community-plugins-title">Community Plugins</div>
+    <div class="community-plugin">
+      <div class="community-plugin-name"><a href="https://github.com/tetsuo76/cliamp-lastfm">cliamp-lastfm</a></div>
+      <div class="community-plugin-desc">Last.fm scrobbling</div>
+      <div class="community-plugin-author"><a href="https://github.com/tetsuo76">@tetsuo76</a></div>
     </div>
   </div>
 </section>
