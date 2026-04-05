@@ -1698,9 +1698,9 @@ function renderStationStats(data,stationKey){
   var barColors={total:"var(--fg)",edm:"var(--cyan)",lofi:"var(--amber)",synthwave:"#ff66cc"};
 
   if(daily.length>0){
-    var maxSessions=Math.max.apply(null,daily.map(function(d){return d.sessions}))||1;
+    var maxHours=Math.max.apply(null,daily.map(function(d){return d.listen_hours}))||1;
     daily.forEach(function(d){
-      var pct=Math.max((d.sessions/maxSessions)*100,3);
+      var pct=Math.max((d.listen_hours/maxHours)*100,3);
       var bar=document.createElement("div");
       bar.className="radio-chart-bar";
       bar.style.height=pct+"%";
@@ -1708,7 +1708,7 @@ function renderStationStats(data,stationKey){
       bar.style.opacity="0.7";
       var tip=document.createElement("div");
       tip.className="tooltip";
-      tip.textContent=d.date+" - "+d.sessions+" sessions, "+d.listen_hours.toFixed(1)+"h";
+      tip.textContent=d.date+" - "+d.listen_hours.toFixed(1)+"h, "+d.sessions+" sessions";
       bar.appendChild(tip);
       chart.appendChild(bar);
     });
