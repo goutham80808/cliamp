@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -149,6 +151,158 @@ func TestParseItunesDuration(t *testing.T) {
 				t.Errorf("parseItunesDuration(%q) = %d, want %d", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSanitizeFilename(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"hello/world", "hello-world"},
+		{"foo\\bar", "foo-bar"},
+		{"a:b*c?d\"e<f>g|h", "a-b-c-d-e-f-g-h"},
+		{"  trim me  ", "trim me"},
+		{"normal name", "normal name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := sanitizeFilename(tt.input)
+			if got != tt.want {
+				t.Errorf("sanitizeFilename(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUniqueDir(t *testing.T) {
+	tmp := t.TempDir()
+	base := filepath.Join(tmp, "testdir")
+
+	// First call: dir does not exist yet.
+	got := uniqueDir(base)
+	if got != base {
+		t.Fatalf("uniqueDir(base) = %q, want %q", got, base)
+	}
+
+	// Create the directory.
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Second call: dir exists, should get " (1)".
+	got = uniqueDir(base)
+	want := base + " (1)"
+	if got != want {
+		t.Fatalf("uniqueDir(base) = %q, want %q", got, want)
+	}
+
+	// Create the " (1)" directory.
+	if err := os.MkdirAll(want, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Third call: should get " (2)".
+	got = uniqueDir(base)
+	want2 := base + " (2)"
+	if got != want2 {
+		t.Fatalf("uniqueDir(base) = %q, want %q", got, want2)
+	}
+}
+
+func TestIsChapterFile(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		// Valid chapter files
+		{"001 - Intro.mp3", true},
+		{"12 - Verse Two.m4a", true},
+		{"1 - A.mp3", true},
+		{"999 - Last Track.webm", true},
+		// Invalid — too short
+		{"1.mp3", false},
+		{"1 - ", false},
+		// Invalid — no separator
+		{"001_Intro.mp3", false},
+		{"001 -Intro.mp3", false},
+		{"001  -  Intro.mp3", false}, // two spaces before hyphen
+		// Invalid — no digits at start
+		{"Intro - 001.mp3", false},
+		{"A - 001.mp3", false},
+		// Invalid — empty
+		{"", false},
+		// Invalid — digits but no separator or extension
+		{"001", false},
+		{"001 ", false},
+		// Invalid — full file name (no chapter pattern)
+		{"Pushpa 2 The Rule Telugu Audio Jukebox.mp3", false},
+		{"Some Full Song.m4a", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := isChapterFile(tt.input)
+			if got != tt.want {
+				t.Errorf("isChapterFile(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSplitChaptersYTDLCleanupRemovesFullFile(t *testing.T) {
+	// Simulate the directory cleanup step: create a directory with a full
+	// file and several chapter files, then call the cleanup logic.
+	// This tests the filter behavior without requiring yt-dlp on the path.
+	tmp := t.TempDir()
+	outDir := filepath.Join(tmp, "splits")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate what yt-dlp produces: one full file + chapter files.
+	files := []string{
+		"Pushpa 2 The Rule - Full Audio Jukebox.mp3",
+		"001 - Intro.mp3",
+		"002 - Versio.mp3",
+		"003 - Salaar Remix.mp3",
+	}
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(outDir, f), []byte("audio"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Run the cleanup logic (same logic as SplitChaptersYTDL step 4).
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if isChapterFile(e.Name()) {
+			count++
+		} else {
+			_ = os.Remove(filepath.Join(outDir, e.Name()))
+		}
+	}
+
+	if count != 3 {
+		t.Fatalf("expected 3 chapter files, got %d", count)
+	}
+
+	// Verify the full file was deleted.
+	if _, err := os.Stat(filepath.Join(outDir, "Pushpa 2 The Rule - Full Audio Jukebox.mp3")); !os.IsNotExist(err) {
+		t.Fatal("expected full file to be deleted")
+	}
+
+	// Verify chapter files still exist.
+	for _, f := range files[1:] {
+		if _, err := os.Stat(filepath.Join(outDir, f)); err != nil {
+			t.Fatalf("chapter file %q was deleted: %v", f, err)
+		}
 	}
 }
 

@@ -628,6 +628,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	case "ctrl+s":
 		return m.saveTrack()
+	case "x":
+		return m.splitTrack()
 	case "S":
 		return m.switchToProvider("spotify")
 
@@ -812,6 +814,34 @@ func (m *Model) saveTrack() tea.Cmd {
 
 	m.status.Showf(statusTTLDefault, "Saved to ~/Music/cliamp/%s", name+ext)
 	return nil
+}
+
+func (m *Model) splitTrack() tea.Cmd {
+	track, idx := m.playlist.Current()
+	if idx < 0 {
+		m.status.Show("Nothing to split", statusTTLShort)
+		return nil
+	}
+
+	if !playlist.IsYouTubeURL(track.Path) && !playlist.IsYTDL(track.Path) {
+		m.status.Show("Only streaming tracks can be split by chapters", statusTTLShort)
+		return nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		m.status.Showf(statusTTLShort, "Split failed: %s", err)
+		return nil
+	}
+
+	saveDir := filepath.Join(home, "Music", "cliamp")
+	if err := os.MkdirAll(saveDir, 0o755); err != nil {
+		m.status.Showf(statusTTLShort, "Split failed: %s", err)
+		return nil
+	}
+
+	m.split.start()
+	return splitChaptersYTDLCmd(track.Path, saveDir)
 }
 
 func (m *Model) resetJumpInput() {

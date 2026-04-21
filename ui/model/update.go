@@ -13,6 +13,7 @@ import (
 	"cliamp/player"
 	"cliamp/playlist"
 	"cliamp/provider"
+	"cliamp/resolve"
 	"cliamp/theme"
 	"cliamp/ui"
 )
@@ -519,6 +520,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status.Showf(statusTTLMedium, "Download failed: %s", msg.err)
 		} else {
 			m.status.Showf(statusTTLMedium, "Saved to %s", msg.path)
+		}
+		return m, nil
+
+	case ytdlSplitMsg:
+		m.split.finish()
+		if msg.err != nil {
+			if errors.Is(msg.err, resolve.ErrNoChapters) {
+				m.status.Show("No chapters found. Use Ctrl+S to save the whole track.", statusTTLMedium)
+			} else {
+				m.status.Showf(statusTTLMedium, "Split failed: %s", msg.err)
+			}
+		} else {
+			m.status.Showf(statusTTLMedium, "Split into %d files in %s", msg.count, msg.outDir)
 		}
 		return m, nil
 

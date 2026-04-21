@@ -97,6 +97,13 @@ type ytdlSavedMsg struct {
 	err  error
 }
 
+// ytdlSplitMsg signals that an async yt-dlp chapter split completed.
+type ytdlSplitMsg struct {
+	outDir string
+	count  int
+	err    error
+}
+
 // — Navidrome browser message types —
 
 // navArtistsLoadedMsg carries the full artist list from a provider browser.
@@ -233,6 +240,13 @@ func saveYTDLCmd(pageURL string, saveDir string) tea.Cmd {
 	return func() tea.Msg {
 		path, err := resolve.DownloadYTDL(pageURL, saveDir)
 		return ytdlSavedMsg{path: path, err: err}
+	}
+}
+
+func splitChaptersYTDLCmd(pageURL, saveDir string) tea.Cmd {
+	return func() tea.Msg {
+		outDir, count, err := resolve.SplitChaptersYTDL(pageURL, saveDir, nil)
+		return ytdlSplitMsg{outDir: outDir, count: count, err: err}
 	}
 }
 

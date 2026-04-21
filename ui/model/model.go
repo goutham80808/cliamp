@@ -183,6 +183,7 @@ type Model struct {
 	ytdlBatch      ytdlBatchState
 	reconnect      reconnectState
 	save           saveState
+	split          splitState
 	status         statusMsg
 	logLines       []logLine
 	network        networkStats

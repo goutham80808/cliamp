@@ -52,6 +52,7 @@ var keymapEntries = []keymapEntry{
 	{"p", "Playlist manager"},
 	{"i", "Track info / metadata"},
 	{"Ctrl+S", "Save/download track to ~/Music"},
+	{"x", "Split chapters (save to ~/Music)"},
 	{"Ctrl+X", "Expand/collapse view"},
 	{"/", "Filter/search list"},
 	{"f", "Toggle bookmark ★ (or favorite station in radio)"},

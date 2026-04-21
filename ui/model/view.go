@@ -152,6 +152,9 @@ func (m Model) mainSections(playlist string, includeTransient bool) []string {
 
 func (m Model) footerMessages() []string {
 	var lines []string
+	if text := m.split.activityText(); text != "" {
+		lines = append(lines, statusStyle.Render(text))
+	}
 	if text := m.save.activityText(); text != "" {
 		lines = append(lines, statusStyle.Render(text))
 	}

@@ -53,6 +53,7 @@ Press `Ctrl+K` in the player to see all keybindings.
 | `u` | Load URL (stream/playlist) |
 | `y` | Show lyrics |
 | `Ctrl+S` | Save track to ~/Music |
+| `x` | Split chapters — save current track split by chapters to ~/Music |
 | `N` | Navidrome browser |
 | `L` | Browse local playlists (with cliamp radio) |
 | `R` | Open radio provider |

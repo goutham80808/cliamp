@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 	"cliamp/ipc"
 	"cliamp/player"
 	"cliamp/pluginmgr"
+	"cliamp/resolve"
 	"cliamp/theme"
 	"cliamp/ui"
 	"cliamp/upgrade"
@@ -60,6 +62,7 @@ func buildApp() *cli.Command {
 			upgradeCommand(),
 			pluginsCommand(),
 			playlistCommand(),
+			splitChaptersCommand(),
 			ipcSimpleCommand("play", "resume playback"),
 			ipcSimpleCommand("pause", "pause playback"),
 			ipcSimpleCommand("toggle", "play/pause toggle"),
@@ -346,6 +349,35 @@ func playlistCommand() *cli.Command {
 					return cmd.PlaylistEnrich(c.Args().First())
 				},
 			},
+		},
+	}
+}
+
+func splitChaptersCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "split-chapters",
+		Usage:     "Split a video by chapters into audio files",
+		ArgsUsage: "<url>",
+		Action: func(ctx context.Context, c *cli.Command) error {
+			if c.Args().Len() == 0 {
+				return fmt.Errorf("usage: cliamp split-chapters <url>")
+			}
+			url := c.Args().First()
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("getting home directory: %w", err)
+			}
+			saveDir := filepath.Join(home, "Music", "cliamp")
+			outDir, count, err := resolve.SplitChaptersYTDL(url, saveDir, os.Stdout)
+			if err != nil {
+				if err == resolve.ErrNoChapters {
+					fmt.Fprintln(os.Stderr, "No chapters found. Use Ctrl+S to save the whole track.")
+					return cli.Exit("", 1)
+				}
+				return err
+			}
+			fmt.Printf("Split into %d files in %s\n", count, outDir)
+			return nil
 		},
 	}
 }

@@ -213,6 +213,31 @@ func (s *saveState) finishDownload() {
 	}
 }
 
+type splitState struct {
+	pending int
+}
+
+func (s splitState) activityText() string {
+	switch s.pending {
+	case 0:
+		return ""
+	case 1:
+		return "Splitting chapters..."
+	default:
+		return fmt.Sprintf("Splitting chapters... (%d)", s.pending)
+	}
+}
+
+func (s *splitState) start() {
+	s.pending++
+}
+
+func (s *splitState) finish() {
+	if s.pending > 0 {
+		s.pending--
+	}
+}
+
 // statusTTL is how long a status line stays visible.
 type statusTTL time.Duration
 

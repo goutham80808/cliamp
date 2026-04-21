@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"io/fs"
 	"mime"
 	"net/http"
@@ -26,6 +27,10 @@ import (
 
 	"github.com/kkdai/youtube/v2"
 )
+
+// ErrNoChapters is returned by SplitChaptersYTDL when the video has no
+// chapter markers.
+var ErrNoChapters = fmt.Errorf("no chapters found")
 
 // httpClient is used for feed and M3U resolution. It has a generous but
 // finite timeout to prevent hanging on unresponsive servers.
@@ -595,4 +600,145 @@ func parseItunesDuration(s string) int {
 // humanizeBasename converts a URL basename like "clr-podcast-467" into "clr podcast 467".
 func humanizeBasename(s string) string {
 	return strings.ReplaceAll(s, "-", " ")
+}
+
+// sanitizeFilename removes or replaces characters that are illegal in file
+// and directory names on common filesystems.
+func sanitizeFilename(name string) string {
+	replacer := strings.NewReplacer(
+		"/", "-",
+		"\\", "-",
+		":", "-",
+		"*", "-",
+		"?", "-",
+		"\"", "-",
+		"<", "-",
+		">", "-",
+		"|", "-",
+	)
+	return strings.TrimSpace(replacer.Replace(name))
+}
+
+// uniqueDir returns a directory path that does not already exist.
+// If dir exists, it appends " (1)", " (2)", etc. (Windows-download style).
+func uniqueDir(dir string) string {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return dir
+	}
+	base := dir
+	for i := 1; ; i++ {
+		candidate := fmt.Sprintf("%s (%d)", base, i)
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+}
+
+// SplitChaptersYTDL downloads a video via yt-dlp, splits it by chapters,
+// and saves the resulting audio files into a subdirectory of baseSaveDir.
+// The subdirectory name is derived from the video title.
+// If progress is non-nil, yt-dlp stdout/stderr are copied to it.
+// Returns the output directory, the number of files created, and any error.
+func SplitChaptersYTDL(pageURL, baseSaveDir string, progress io.Writer) (string, int, error) {
+	if _, err := exec.LookPath("yt-dlp"); err != nil {
+		return "", 0, fmt.Errorf("yt-dlp not found in PATH")
+	}
+
+	// 1. Probe metadata to get title and check for chapters.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	probeCmd := exec.CommandContext(ctx, "yt-dlp",
+		"--no-download", "--dump-json", "--socket-timeout", "15", pageURL)
+	var probeStderr strings.Builder
+	probeCmd.Stderr = &probeStderr
+	probeOut, err := probeCmd.Output()
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", 0, fmt.Errorf("yt-dlp: timed out probing %s (30s)", pageURL)
+		}
+		msg := strings.TrimSpace(probeStderr.String())
+		if msg != "" {
+			return "", 0, fmt.Errorf("yt-dlp: %s", msg)
+		}
+		return "", 0, fmt.Errorf("yt-dlp: %w", err)
+	}
+
+	var info struct {
+		Title    string `json:"title"`
+		Chapters []struct {
+			Title string `json:"title"`
+		} `json:"chapters"`
+	}
+	if err := json.Unmarshal(probeOut, &info); err != nil {
+		return "", 0, fmt.Errorf("parsing yt-dlp probe output: %w", err)
+	}
+
+	if len(info.Chapters) == 0 {
+		return "", 0, ErrNoChapters
+	}
+
+	// 2. Prepare output directory.
+	outDir := uniqueDir(filepath.Join(baseSaveDir, sanitizeFilename(info.Title)))
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return "", 0, fmt.Errorf("creating output directory: %w", err)
+	}
+
+	// 3. Download, extract to mp3, and split by chapters.
+	// The "chapter:" prefix in the -o template is required by yt-dlp's
+	// --split-chapters flag to name the individual chapter files.
+	chapterTemplate := filepath.Join(outDir, "%(section_number)03d - %(section_title)s.%(ext)s")
+	dlCmd := exec.Command("yt-dlp",
+		"-f", "bestaudio",
+		"-x",
+		"--audio-format", "mp3",
+		"--no-playlist",
+		"--split-chapters",
+		"-o", "chapter:"+chapterTemplate,
+		pageURL)
+	if progress != nil {
+		dlCmd.Stdout = progress
+		dlCmd.Stderr = progress
+	}
+	if err := dlCmd.Run(); err != nil {
+		return "", 0, fmt.Errorf("yt-dlp split download failed: %w", err)
+	}
+
+	// 4. Clean up: remove the full file that yt-dlp leaves behind.
+	// Chapter files match the pattern "NNN - Title.ext"; the full file does not.
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return outDir, 0, fmt.Errorf("reading output directory: %w", err)
+	}
+	count := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if isChapterFile(e.Name()) {
+			count++
+		} else {
+			_ = os.Remove(filepath.Join(outDir, e.Name()))
+		}
+	}
+
+	return outDir, count, nil
+}
+
+// isChapterFile reports whether the filename matches the yt-dlp chapter
+// naming pattern "NNN - Chapter Title.ext" (digits, space, hyphen, space).
+func isChapterFile(name string) bool {
+	// Chapter files look like "001 - Intro.mp3"
+	if len(name) < 8 { // minimum: "1 - X.mp3"
+		return false
+	}
+	i := 0
+	for i < len(name) && name[i] >= '0' && name[i] <= '9' {
+		i++
+	}
+	if i == 0 || i >= len(name) {
+		return false
+	}
+	// After digits, expect " - " then at least one character before the extension.
+	return strings.HasPrefix(name[i:], " - ") && len(name[i+3:]) > 0
 }
