@@ -685,8 +685,9 @@ func SplitChaptersYTDL(pageURL, baseSaveDir string, progress io.Writer) (string,
 	}
 
 	// 3. Download, extract to mp3, and split by chapters.
-	// The "chapter:" prefix in the -o template is required by yt-dlp's
-	// --split-chapters flag to name the individual chapter files.
+	// The base -o template sends the full file into outDir so cleanup can
+	// remove it. The "chapter:" prefix is required for --split-chapters to
+	// name the individual chapter files.
 	chapterTemplate := filepath.Join(outDir, "%(section_number)03d - %(section_title)s.%(ext)s")
 	dlCmd := exec.Command("yt-dlp",
 		"-f", "bestaudio",
@@ -694,6 +695,7 @@ func SplitChaptersYTDL(pageURL, baseSaveDir string, progress io.Writer) (string,
 		"--audio-format", "mp3",
 		"--no-playlist",
 		"--split-chapters",
+		"-o", filepath.Join(outDir, "%(title)s.%(ext)s"),
 		"-o", "chapter:"+chapterTemplate,
 		pageURL)
 	if progress != nil {
