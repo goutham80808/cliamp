@@ -354,6 +354,8 @@ func playlistCommand() *cli.Command {
 	}
 }
 
+// splitChaptersCommand returns the CLI subcommand for splitting a YouTube
+// video by chapters into individual MP3 files saved to ~/Music/cliamp/.
 func splitChaptersCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "split-chapters",

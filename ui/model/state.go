@@ -214,11 +214,15 @@ func (s *saveState) finishDownload() {
 	}
 }
 
+// splitState tracks the lifecycle of an in-progress chapter split operation.
+// It holds a cancel function so the TUI can abort the split by pressing x.
 type splitState struct {
 	active bool
 	cancel context.CancelFunc
 }
 
+// activityText returns a status string while a split is in progress,
+// or an empty string if no split is running.
 func (s splitState) activityText() string {
 	if !s.active {
 		return ""
@@ -226,11 +230,14 @@ func (s splitState) activityText() string {
 	return "Splitting chapters... [press x to cancel]"
 }
 
+// start marks the split as active and stores the cancel function for later use.
 func (s *splitState) start(cancel context.CancelFunc) {
 	s.active = true
 	s.cancel = cancel
 }
 
+// cancelSplit aborts the in-progress split by calling the stored cancel
+// function and resetting the state. It is safe to call multiple times.
 func (s *splitState) cancelSplit() {
 	if s.cancel != nil {
 		s.cancel()
@@ -239,6 +246,7 @@ func (s *splitState) cancelSplit() {
 	s.active = false
 }
 
+// finish marks the split as complete and clears the cancel function.
 func (s *splitState) finish() {
 	s.active = false
 	s.cancel = nil

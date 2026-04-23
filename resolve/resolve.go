@@ -711,7 +711,7 @@ func SplitChaptersYTDL(ctx context.Context, pageURL, baseSaveDir string) (string
 	// remove it. The "chapter:" prefix is required for --split-chapters to
 	// name the individual chapter files.
 	chapterTemplate := filepath.Join(outDir, "%(section_number)03d - %(section_title)s.%(ext)s")
-	dlCmd := exec.CommandContext(ctx, "yt-dlp",
+	dlCmd := exec.Command("yt-dlp",
 		"-f", "bestaudio",
 		"-x",
 		"--audio-format", "mp3",
@@ -720,14 +720,33 @@ func SplitChaptersYTDL(ctx context.Context, pageURL, baseSaveDir string) (string
 		"-o", filepath.Join(outDir, "%(title)s.%(ext)s"),
 		"-o", "chapter:"+chapterTemplate,
 		pageURL)
-	if err := dlCmd.Run(); err != nil {
+	if err := dlCmd.Start(); err != nil {
+		return "", 0, fmt.Errorf("yt-dlp split download failed: %w", err)
+	}
+	pid := dlCmd.Process.Pid
+
+	// Watch for context cancellation and kill the entire process tree
+	// (yt-dlp + ffmpeg + any children) so file handles are released.
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			killProcessTree(pid)
+		case <-done:
+		}
+	}()
+
+	if err := dlCmd.Wait(); err != nil {
+		close(done)
 		if ctx.Err() == context.Canceled {
+			time.Sleep(300 * time.Millisecond) // let OS release file handles
 			cleanDir()
 			return "", 0, context.Canceled
 		}
 		cleanDir()
 		return "", 0, fmt.Errorf("yt-dlp split download failed: %w", err)
 	}
+	close(done)
 
 	// 4. Clean up: remove the full file that yt-dlp leaves behind.
 	count, err := cleanupNonChapterFiles(outDir)

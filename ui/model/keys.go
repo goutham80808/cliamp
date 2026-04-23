@@ -816,6 +816,9 @@ func (m *Model) saveTrack() tea.Cmd {
 	return nil
 }
 
+// splitTrack initiates a chapter split for the current track, or cancels
+// a split that is already in progress. It guards against non-streaming tracks
+// and empty playlists.
 func (m *Model) splitTrack() tea.Cmd {
 	track, idx := m.playlist.Current()
 	if idx < 0 {

@@ -243,6 +243,8 @@ func saveYTDLCmd(pageURL string, saveDir string) tea.Cmd {
 	}
 }
 
+// splitChaptersYTDLCmd returns a tea.Cmd that downloads and splits a YouTube
+// video by chapters in the background, posting a ytdlSplitMsg on completion.
 func splitChaptersYTDLCmd(ctx context.Context, pageURL, saveDir string) tea.Cmd {
 	return func() tea.Msg {
 		outDir, count, err := resolve.SplitChaptersYTDL(ctx, pageURL, saveDir)
