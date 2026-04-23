@@ -164,6 +164,14 @@ func TestSanitizeFilename(t *testing.T) {
 		{"a:b*c?d\"e<f>g|h", "a-b-c-d-e-f-g-h"},
 		{"  trim me  ", "trim me"},
 		{"normal name", "normal name"},
+		// Path traversal and edge cases.
+		{"..", "untitled"},
+		{".", "untitled"},
+		{"", "untitled"},
+		{"...", "untitled"},
+		{".hidden", "hidden"},
+		{"..hidden", "hidden"},
+		{"  ..  ", "untitled"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
@@ -238,6 +246,9 @@ func TestIsChapterFile(t *testing.T) {
 		// Invalid — full file name (no chapter pattern)
 		{"Pushpa 2 The Rule Telugu Audio Jukebox.mp3", false},
 		{"Some Full Song.m4a", false},
+		// Invalid — no title, just extension after separator
+		{"1 - .mp3", false},
+		{"001 - .m4a", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
@@ -272,21 +283,10 @@ func TestSplitChaptersYTDLCleanupRemovesFullFile(t *testing.T) {
 		}
 	}
 
-	// Run the cleanup logic (same logic as SplitChaptersYTDL step 4).
-	entries, err := os.ReadDir(outDir)
+	// Run the production cleanup helper.
+	count, err := cleanupNonChapterFiles(outDir)
 	if err != nil {
 		t.Fatal(err)
-	}
-	count := 0
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if isChapterFile(e.Name()) {
-			count++
-		} else {
-			_ = os.Remove(filepath.Join(outDir, e.Name()))
-		}
 	}
 
 	if count != 3 {

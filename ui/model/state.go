@@ -4,6 +4,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -214,28 +215,33 @@ func (s *saveState) finishDownload() {
 }
 
 type splitState struct {
-	pending int
+	active bool
+	cancel context.CancelFunc
 }
 
 func (s splitState) activityText() string {
-	switch s.pending {
-	case 0:
+	if !s.active {
 		return ""
-	case 1:
-		return "Splitting chapters..."
-	default:
-		return fmt.Sprintf("Splitting chapters... (%d)", s.pending)
 	}
+	return "Splitting chapters... [press x to cancel]"
 }
 
-func (s *splitState) start() {
-	s.pending++
+func (s *splitState) start(cancel context.CancelFunc) {
+	s.active = true
+	s.cancel = cancel
+}
+
+func (s *splitState) cancelSplit() {
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
+	}
+	s.active = false
 }
 
 func (s *splitState) finish() {
-	if s.pending > 0 {
-		s.pending--
-	}
+	s.active = false
+	s.cancel = nil
 }
 
 // statusTTL is how long a status line stays visible.

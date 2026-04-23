@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -526,6 +527,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ytdlSplitMsg:
 		m.split.finish()
 		if msg.err != nil {
+			if errors.Is(msg.err, context.Canceled) {
+				// User already saw "Split cancelled." when they pressed x.
+				return m, nil
+			}
 			if errors.Is(msg.err, resolve.ErrNoChapters) {
 				m.status.Show("No chapters found. Use Ctrl+S to save the whole track.", statusTTLMedium)
 			} else {

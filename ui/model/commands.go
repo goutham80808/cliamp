@@ -243,9 +243,9 @@ func saveYTDLCmd(pageURL string, saveDir string) tea.Cmd {
 	}
 }
 
-func splitChaptersYTDLCmd(pageURL, saveDir string) tea.Cmd {
+func splitChaptersYTDLCmd(ctx context.Context, pageURL, saveDir string) tea.Cmd {
 	return func() tea.Msg {
-		outDir, count, err := resolve.SplitChaptersYTDL(pageURL, saveDir, nil)
+		outDir, count, err := resolve.SplitChaptersYTDL(ctx, pageURL, saveDir)
 		return ytdlSplitMsg{outDir: outDir, count: count, err: err}
 	}
 }

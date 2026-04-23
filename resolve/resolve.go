@@ -7,8 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"mime"
 	"net/http"
@@ -30,7 +30,7 @@ import (
 
 // ErrNoChapters is returned by SplitChaptersYTDL when the video has no
 // chapter markers.
-var ErrNoChapters = fmt.Errorf("no chapters found")
+var ErrNoChapters = errors.New("no chapters found")
 
 // httpClient is used for feed and M3U resolution. It has a generous but
 // finite timeout to prevent hanging on unresponsive servers.
@@ -616,45 +616,57 @@ func sanitizeFilename(name string) string {
 		">", "-",
 		"|", "-",
 	)
-	return strings.TrimSpace(replacer.Replace(name))
+	cleaned := strings.TrimSpace(replacer.Replace(name))
+	cleaned = strings.TrimLeft(cleaned, ".")
+	if cleaned == "" || cleaned == "." || cleaned == ".." {
+		return "untitled"
+	}
+	return cleaned
 }
 
 // uniqueDir returns a directory path that does not already exist.
 // If dir exists, it appends " (1)", " (2)", etc. (Windows-download style).
+// Returns the original dir if stat fails for a reason other than "not exist".
 func uniqueDir(dir string) string {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return dir
 	}
 	base := dir
-	for i := 1; ; i++ {
+	for i := 1; i < 1000; i++ {
 		candidate := fmt.Sprintf("%s (%d)", base, i)
-		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+		_, err := os.Stat(candidate)
+		if os.IsNotExist(err) {
+			return candidate
+		}
+		if err != nil {
+			// Stat failed for a reason other than "not exist" (e.g. permission
+			// denied). Return the candidate as-is to avoid an infinite loop.
 			return candidate
 		}
 	}
+	return base
 }
 
-// SplitChaptersYTDL downloads a video via yt-dlp, splits it by chapters,
-// and saves the resulting audio files into a subdirectory of baseSaveDir.
-// The subdirectory name is derived from the video title.
-// If progress is non-nil, yt-dlp stdout/stderr are copied to it.
+// SplitChaptersYTDL downloads a YouTube track, splits it by chapters, and saves
+// the resulting MP3s to a subdirectory of baseSaveDir named after the video title.
+// The provided context can be used to cancel both the probe and download phases.
 // Returns the output directory, the number of files created, and any error.
-func SplitChaptersYTDL(pageURL, baseSaveDir string, progress io.Writer) (string, int, error) {
+func SplitChaptersYTDL(ctx context.Context, pageURL, baseSaveDir string) (string, int, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return "", 0, fmt.Errorf("yt-dlp not found in PATH")
 	}
 
 	// 1. Probe metadata to get title and check for chapters.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	probeCtx, probeCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer probeCancel()
 
-	probeCmd := exec.CommandContext(ctx, "yt-dlp",
+	probeCmd := exec.CommandContext(probeCtx, "yt-dlp",
 		"--no-download", "--dump-json", "--socket-timeout", "15", pageURL)
 	var probeStderr strings.Builder
 	probeCmd.Stderr = &probeStderr
 	probeOut, err := probeCmd.Output()
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if probeCtx.Err() == context.DeadlineExceeded {
 			return "", 0, fmt.Errorf("yt-dlp: timed out probing %s (30s)", pageURL)
 		}
 		msg := strings.TrimSpace(probeStderr.String())
@@ -684,12 +696,22 @@ func SplitChaptersYTDL(pageURL, baseSaveDir string, progress io.Writer) (string,
 		return "", 0, fmt.Errorf("creating output directory: %w", err)
 	}
 
+	// cleanDir removes the output directory if it is empty or contains only
+	// partial files left over from a cancelled or failed download.
+	cleanDir := func() {
+		entries, _ := os.ReadDir(outDir)
+		for _, e := range entries {
+			_ = os.Remove(filepath.Join(outDir, e.Name()))
+		}
+		os.Remove(outDir) // remove the now-empty directory
+	}
+
 	// 3. Download, extract to mp3, and split by chapters.
 	// The base -o template sends the full file into outDir so cleanup can
 	// remove it. The "chapter:" prefix is required for --split-chapters to
 	// name the individual chapter files.
 	chapterTemplate := filepath.Join(outDir, "%(section_number)03d - %(section_title)s.%(ext)s")
-	dlCmd := exec.Command("yt-dlp",
+	dlCmd := exec.CommandContext(ctx, "yt-dlp",
 		"-f", "bestaudio",
 		"-x",
 		"--audio-format", "mp3",
@@ -698,19 +720,30 @@ func SplitChaptersYTDL(pageURL, baseSaveDir string, progress io.Writer) (string,
 		"-o", filepath.Join(outDir, "%(title)s.%(ext)s"),
 		"-o", "chapter:"+chapterTemplate,
 		pageURL)
-	if progress != nil {
-		dlCmd.Stdout = progress
-		dlCmd.Stderr = progress
-	}
 	if err := dlCmd.Run(); err != nil {
+		if ctx.Err() == context.Canceled {
+			cleanDir()
+			return "", 0, context.Canceled
+		}
+		cleanDir()
 		return "", 0, fmt.Errorf("yt-dlp split download failed: %w", err)
 	}
 
 	// 4. Clean up: remove the full file that yt-dlp leaves behind.
-	// Chapter files match the pattern "NNN - Title.ext"; the full file does not.
+	count, err := cleanupNonChapterFiles(outDir)
+	if err != nil {
+		return outDir, 0, err
+	}
+
+	return outDir, count, nil
+}
+
+// cleanupNonChapterFiles removes files in outDir that don't match the chapter
+// naming pattern and returns the count of remaining chapter files.
+func cleanupNonChapterFiles(outDir string) (int, error) {
 	entries, err := os.ReadDir(outDir)
 	if err != nil {
-		return outDir, 0, fmt.Errorf("reading output directory: %w", err)
+		return 0, fmt.Errorf("reading output directory: %w", err)
 	}
 	count := 0
 	for _, e := range entries {
@@ -723,8 +756,7 @@ func SplitChaptersYTDL(pageURL, baseSaveDir string, progress io.Writer) (string,
 			_ = os.Remove(filepath.Join(outDir, e.Name()))
 		}
 	}
-
-	return outDir, count, nil
+	return count, nil
 }
 
 // isChapterFile reports whether the filename matches the yt-dlp chapter
@@ -741,6 +773,11 @@ func isChapterFile(name string) bool {
 	if i == 0 || i >= len(name) {
 		return false
 	}
-	// After digits, expect " - " then at least one character before the extension.
-	return strings.HasPrefix(name[i:], " - ") && len(name[i+3:]) > 0
+	// After digits, expect " - " then at least one non-dot character (the title).
+	rest := name[i:]
+	if !strings.HasPrefix(rest, " - ") {
+		return false
+	}
+	title := rest[3:]
+	return len(title) > 0 && title[0] != '.'
 }

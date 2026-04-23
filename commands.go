@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -368,9 +369,9 @@ func splitChaptersCommand() *cli.Command {
 				return fmt.Errorf("getting home directory: %w", err)
 			}
 			saveDir := filepath.Join(home, "Music", "cliamp")
-			outDir, count, err := resolve.SplitChaptersYTDL(url, saveDir, os.Stdout)
+			outDir, count, err := resolve.SplitChaptersYTDL(ctx, url, saveDir)
 			if err != nil {
-				if err == resolve.ErrNoChapters {
+				if errors.Is(err, resolve.ErrNoChapters) {
 					fmt.Fprintln(os.Stderr, "No chapters found. Use Ctrl+S to save the whole track.")
 					return cli.Exit("", 1)
 				}

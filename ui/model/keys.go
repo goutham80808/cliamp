@@ -828,6 +828,13 @@ func (m *Model) splitTrack() tea.Cmd {
 		return nil
 	}
 
+	// If a split is already running, cancel it.
+	if m.split.active {
+		m.split.cancelSplit()
+		m.status.Show("Split cancelled.", statusTTLShort)
+		return nil
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		m.status.Showf(statusTTLShort, "Split failed: %s", err)
@@ -840,8 +847,9 @@ func (m *Model) splitTrack() tea.Cmd {
 		return nil
 	}
 
-	m.split.start()
-	return splitChaptersYTDLCmd(track.Path, saveDir)
+	ctx, cancel := context.WithCancel(context.Background())
+	m.split.start(cancel)
+	return splitChaptersYTDLCmd(ctx, track.Path, saveDir)
 }
 
 func (m *Model) resetJumpInput() {
