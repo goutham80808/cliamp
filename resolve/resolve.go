@@ -650,7 +650,7 @@ func createUniqueDir(dir string) (string, error) {
 // Returns the output directory, the number of files created, and any error.
 func SplitChaptersYTDL(ctx context.Context, pageURL, baseSaveDir string) (string, int, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
-		return "", 0, fmt.Errorf("yt-dlp not found in PATH")
+		return "", 0, fmt.Errorf("looking up yt-dlp: %w", err)
 	}
 
 	// 1. Probe metadata to get title and check for chapters.
@@ -711,13 +711,16 @@ func SplitChaptersYTDL(ctx context.Context, pageURL, baseSaveDir string) (string
 	// remove it. The "chapter:" prefix is required for --split-chapters to
 	// name the individual chapter files.
 	chapterTemplate := filepath.Join(outDir, "%(section_number)03d - %(section_title)s.%(ext)s")
+	// Use a sentinel name for the unsplit file so it cannot be mistaken for a
+	// chapter file by cleanupNonChapterFiles (chapter files match "NNN - Title.ext").
+	sentinelTemplate := filepath.Join(outDir, "_unsplit_audio.%(ext)s")
 	dlCmd := exec.CommandContext(ctx, "yt-dlp",
 		"-f", "bestaudio",
 		"-x",
 		"--audio-format", "mp3",
 		"--no-playlist",
 		"--split-chapters",
-		"-o", filepath.Join(outDir, "%(title)s.%(ext)s"),
+		"-o", sentinelTemplate,
 		"-o", "chapter:"+chapterTemplate,
 		pageURL)
 	setProcAttr(dlCmd)

@@ -12,8 +12,11 @@ import (
 // entire group, which requires the child to have been started with
 // SysProcAttr{Setpgid: true}.
 func killProcessTree(pid int) error {
+	if pid <= 0 {
+		return fmt.Errorf("killProcessTree: invalid pid %d", pid)
+	}
 	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil {
-		return fmt.Errorf("kill process group -%d: %w", pid, err)
+		return fmt.Errorf("killProcessTree(%d): %w", pid, err)
 	}
 	return nil
 }
