@@ -462,12 +462,12 @@ func resolveYTDLRange(pageURL string, start, end int) ([]playlist.Track, error) 
 	cmd.Stderr = &stderr
 	stdout, err := cmd.Output()
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("yt-dlp: timed out resolving %s (30s)", pageURL)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("resolving yt-dlp metadata: %w", ctxErr)
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg != "" {
-			return nil, fmt.Errorf("yt-dlp: %s", msg)
+			return nil, fmt.Errorf("yt-dlp: %s: %w", msg, err)
 		}
 		return nil, fmt.Errorf("yt-dlp: %w", err)
 	}
@@ -624,27 +624,24 @@ func sanitizeFilename(name string) string {
 	return cleaned
 }
 
-// uniqueDir returns a directory path that does not already exist.
-// If dir exists, it appends " (1)", " (2)", etc. (Windows-download style).
-// Returns the original dir if stat fails for a reason other than "not exist".
-func uniqueDir(dir string) string {
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return dir
-	}
-	base := dir
-	for i := 1; i < 1000; i++ {
-		candidate := fmt.Sprintf("%s (%d)", base, i)
-		_, err := os.Stat(candidate)
-		if os.IsNotExist(err) {
-			return candidate
+// createUniqueDir creates and returns a directory path that did not already
+// exist. If dir exists, it appends " (1)", " (2)", etc. (Windows-download
+// style). Uses os.Mkdir atomically to avoid race conditions.
+func createUniqueDir(dir string) (string, error) {
+	for i := 0; i < 1000; i++ {
+		candidate := dir
+		if i > 0 {
+			candidate = fmt.Sprintf("%s (%d)", dir, i)
 		}
-		if err != nil {
-			// Stat failed for a reason other than "not exist" (e.g. permission
-			// denied). Return the candidate as-is to avoid an infinite loop.
-			return candidate
+		if err := os.Mkdir(candidate, 0o755); err == nil {
+			return candidate, nil
+		} else if errors.Is(err, fs.ErrExist) {
+			continue
+		} else {
+			return "", fmt.Errorf("creating output directory %s: %w", candidate, err)
 		}
 	}
-	return base
+	return "", fmt.Errorf("creating unique output directory for %s: exhausted suffixes", dir)
 }
 
 // SplitChaptersYTDL downloads a YouTube track, splits it by chapters, and saves
@@ -661,19 +658,19 @@ func SplitChaptersYTDL(ctx context.Context, pageURL, baseSaveDir string) (string
 	defer probeCancel()
 
 	probeCmd := exec.CommandContext(probeCtx, "yt-dlp",
-		"--no-download", "--dump-json", "--socket-timeout", "15", pageURL)
+		"--no-download", "--dump-json", "--no-playlist", "--socket-timeout", "15", pageURL)
 	var probeStderr strings.Builder
 	probeCmd.Stderr = &probeStderr
 	probeOut, err := probeCmd.Output()
 	if err != nil {
-		if probeCtx.Err() == context.DeadlineExceeded {
-			return "", 0, fmt.Errorf("yt-dlp: timed out probing %s (30s)", pageURL)
+		if ctxErr := probeCtx.Err(); ctxErr != nil {
+			return "", 0, fmt.Errorf("probing yt-dlp metadata: %w", ctxErr)
 		}
 		msg := strings.TrimSpace(probeStderr.String())
 		if msg != "" {
-			return "", 0, fmt.Errorf("yt-dlp: %s", msg)
+			return "", 0, fmt.Errorf("probing yt-dlp metadata: %s: %w", msg, err)
 		}
-		return "", 0, fmt.Errorf("yt-dlp: %w", err)
+		return "", 0, fmt.Errorf("probing yt-dlp metadata: %w", err)
 	}
 
 	var info struct {
@@ -691,9 +688,12 @@ func SplitChaptersYTDL(ctx context.Context, pageURL, baseSaveDir string) (string
 	}
 
 	// 2. Prepare output directory.
-	outDir := uniqueDir(filepath.Join(baseSaveDir, sanitizeFilename(info.Title)))
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return "", 0, fmt.Errorf("creating output directory: %w", err)
+	if err := os.MkdirAll(baseSaveDir, 0o755); err != nil {
+		return "", 0, fmt.Errorf("creating base output directory: %w", err)
+	}
+	outDir, err := createUniqueDir(filepath.Join(baseSaveDir, sanitizeFilename(info.Title)))
+	if err != nil {
+		return "", 0, err
 	}
 
 	// cleanDir removes the output directory if it is empty or contains only
@@ -711,7 +711,7 @@ func SplitChaptersYTDL(ctx context.Context, pageURL, baseSaveDir string) (string
 	// remove it. The "chapter:" prefix is required for --split-chapters to
 	// name the individual chapter files.
 	chapterTemplate := filepath.Join(outDir, "%(section_number)03d - %(section_title)s.%(ext)s")
-	dlCmd := exec.Command("yt-dlp",
+	dlCmd := exec.CommandContext(ctx, "yt-dlp",
 		"-f", "bestaudio",
 		"-x",
 		"--audio-format", "mp3",
@@ -720,6 +720,7 @@ func SplitChaptersYTDL(ctx context.Context, pageURL, baseSaveDir string) (string
 		"-o", filepath.Join(outDir, "%(title)s.%(ext)s"),
 		"-o", "chapter:"+chapterTemplate,
 		pageURL)
+	setProcAttr(dlCmd)
 	if err := dlCmd.Start(); err != nil {
 		return "", 0, fmt.Errorf("yt-dlp split download failed: %w", err)
 	}
@@ -738,10 +739,10 @@ func SplitChaptersYTDL(ctx context.Context, pageURL, baseSaveDir string) (string
 
 	if err := dlCmd.Wait(); err != nil {
 		close(done)
-		if ctx.Err() == context.Canceled {
+		if ctxErr := ctx.Err(); ctxErr != nil {
 			time.Sleep(300 * time.Millisecond) // let OS release file handles
 			cleanDir()
-			return "", 0, context.Canceled
+			return "", 0, fmt.Errorf("running yt-dlp split download: %w", ctxErr)
 		}
 		cleanDir()
 		return "", 0, fmt.Errorf("yt-dlp split download failed: %w", err)
@@ -772,7 +773,10 @@ func cleanupNonChapterFiles(outDir string) (int, error) {
 		if isChapterFile(e.Name()) {
 			count++
 		} else {
-			_ = os.Remove(filepath.Join(outDir, e.Name()))
+			path := filepath.Join(outDir, e.Name())
+			if err := os.Remove(path); err != nil {
+				return count, fmt.Errorf("removing non-chapter file %s: %w", path, err)
+			}
 		}
 	}
 	return count, nil

@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"cliamp/playlist"
@@ -10,20 +11,26 @@ import (
 )
 
 func TestSplitStateActivityText(t *testing.T) {
-	var split splitState
-
-	if got := split.activityText(); got != "" {
-		t.Fatalf("activityText() = %q, want empty", got)
+	tests := []struct {
+		name string
+		run  func(*splitState)
+		want string
+	}{
+		{"inactive", func(*splitState) {}, ""},
+		{"active", func(s *splitState) { s.start(func() {}) }, "Splitting chapters... [press x to cancel]"},
+		{"finished", func(s *splitState) {
+			s.start(func() {})
+			s.finish()
+		}, ""},
 	}
-
-	split.start(func() {})
-	if got := split.activityText(); got != "Splitting chapters... [press x to cancel]" {
-		t.Fatalf("activityText() after start = %q, want %q", got, "Splitting chapters... [press x to cancel]")
-	}
-
-	split.finish()
-	if got := split.activityText(); got != "" {
-		t.Fatalf("activityText() after finish = %q, want empty", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var split splitState
+			tt.run(&split)
+			if got := split.activityText(); got != tt.want {
+				t.Errorf("activityText() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -102,6 +109,12 @@ func TestYTDLSplitMsg(t *testing.T) {
 		{
 			name:       "no chapters",
 			msg:        ytdlSplitMsg{err: resolve.ErrNoChapters},
+			wantStatus: "No chapters found. Use Ctrl+S to save the whole track.",
+			wantActive: false,
+		},
+		{
+			name:       "wrapped no chapters",
+			msg:        ytdlSplitMsg{err: fmt.Errorf("probing chapters: %w", resolve.ErrNoChapters)},
 			wantStatus: "No chapters found. Use Ctrl+S to save the whole track.",
 			wantActive: false,
 		},

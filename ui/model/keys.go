@@ -820,6 +820,13 @@ func (m *Model) saveTrack() tea.Cmd {
 // a split that is already in progress. It guards against non-streaming tracks
 // and empty playlists.
 func (m *Model) splitTrack() tea.Cmd {
+	// If a split is already running, cancel it regardless of playlist state.
+	if m.split.active {
+		m.split.cancelSplit()
+		m.status.Show("Split cancelled.", statusTTLShort)
+		return nil
+	}
+
 	track, idx := m.playlist.Current()
 	if idx < 0 {
 		m.status.Show("Nothing to split", statusTTLShort)
@@ -828,13 +835,6 @@ func (m *Model) splitTrack() tea.Cmd {
 
 	if !playlist.IsYouTubeURL(track.Path) && !playlist.IsYTDL(track.Path) {
 		m.status.Show("Only streaming tracks can be split by chapters", statusTTLShort)
-		return nil
-	}
-
-	// If a split is already running, cancel it.
-	if m.split.active {
-		m.split.cancelSplit()
-		m.status.Show("Split cancelled.", statusTTLShort)
 		return nil
 	}
 

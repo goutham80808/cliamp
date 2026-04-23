@@ -377,7 +377,7 @@ func splitChaptersCommand() *cli.Command {
 					fmt.Fprintln(os.Stderr, "No chapters found. Use Ctrl+S to save the whole track.")
 					return cli.Exit("", 1)
 				}
-				return err
+				return fmt.Errorf("splitting chapters: %w", err)
 			}
 			fmt.Printf("Split into %d files in %s\n", count, outDir)
 			return nil

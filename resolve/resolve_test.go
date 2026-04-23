@@ -183,38 +183,45 @@ func TestSanitizeFilename(t *testing.T) {
 	}
 }
 
-func TestUniqueDir(t *testing.T) {
-	tmp := t.TempDir()
-	base := filepath.Join(tmp, "testdir")
-
-	// First call: dir does not exist yet.
-	got := uniqueDir(base)
-	if got != base {
-		t.Fatalf("uniqueDir(base) = %q, want %q", got, base)
+func TestCreateUniqueDir(t *testing.T) {
+	tests := []struct {
+		name         string
+		precreateDir string
+		wantSuffix   string
+	}{
+		{name: "dir does not exist", wantSuffix: ""},
+		{name: "base exists", precreateDir: "", wantSuffix: " (1)"},
+		{name: "base and (1) exist", precreateDir: " (1)", wantSuffix: " (2)"},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			base := filepath.Join(tmp, "testdir")
 
-	// Create the directory.
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
+			if tt.precreateDir == "" && tt.wantSuffix != "" {
+				// Pre-create the base directory.
+				if err := os.MkdirAll(base, 0o755); err != nil {
+					t.Fatalf("setup: %v", err)
+				}
+			} else if tt.precreateDir != "" {
+				// Pre-create base and the suffix directory.
+				if err := os.MkdirAll(base, 0o755); err != nil {
+					t.Fatalf("setup base: %v", err)
+				}
+				if err := os.MkdirAll(base+tt.precreateDir, 0o755); err != nil {
+					t.Fatalf("setup suffix: %v", err)
+				}
+			}
 
-	// Second call: dir exists, should get " (1)".
-	got = uniqueDir(base)
-	want := base + " (1)"
-	if got != want {
-		t.Fatalf("uniqueDir(base) = %q, want %q", got, want)
-	}
-
-	// Create the " (1)" directory.
-	if err := os.MkdirAll(want, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-
-	// Third call: should get " (2)".
-	got = uniqueDir(base)
-	want2 := base + " (2)"
-	if got != want2 {
-		t.Fatalf("uniqueDir(base) = %q, want %q", got, want2)
+			got, err := createUniqueDir(base)
+			if err != nil {
+				t.Fatalf("createUniqueDir() error: %v", err)
+			}
+			want := base + tt.wantSuffix
+			if got != want {
+				t.Errorf("createUniqueDir() = %q, want %q", got, want)
+			}
+		})
 	}
 }
 
@@ -260,49 +267,60 @@ func TestIsChapterFile(t *testing.T) {
 	}
 }
 
-func TestSplitChaptersYTDLCleanupRemovesFullFile(t *testing.T) {
-	// Simulate the directory cleanup step: create a directory with a full
-	// file and several chapter files, then call the cleanup logic.
-	// This tests the filter behavior without requiring yt-dlp on the path.
-	tmp := t.TempDir()
-	outDir := filepath.Join(tmp, "splits")
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		t.Fatal(err)
+func TestCleanupNonChapterFiles(t *testing.T) {
+	tests := []struct {
+		name      string
+		files     []string
+		wantCount int
+		wantGone  string // file expected to be deleted
+	}{
+		{
+			name: "removes full file, keeps chapters",
+			files: []string{
+				"Pushpa 2 The Rule - Full Audio Jukebox.mp3",
+				"001 - Intro.mp3",
+				"002 - Versio.mp3",
+				"003 - Salaar Remix.mp3",
+			},
+			wantCount: 3,
+			wantGone:  "Pushpa 2 The Rule - Full Audio Jukebox.mp3",
+		},
+		{
+			name: "only chapter files",
+			files: []string{
+				"001 - Intro.mp3",
+				"002 - Outro.mp3",
+			},
+			wantCount: 2,
+		},
+		{
+			name:      "empty directory",
+			files:     nil,
+			wantCount: 0,
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			for _, f := range tt.files {
+				if err := os.WriteFile(filepath.Join(tmp, f), []byte("audio"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
 
-	// Simulate what yt-dlp produces: one full file + chapter files.
-	files := []string{
-		"Pushpa 2 The Rule - Full Audio Jukebox.mp3",
-		"001 - Intro.mp3",
-		"002 - Versio.mp3",
-		"003 - Salaar Remix.mp3",
-	}
-	for _, f := range files {
-		if err := os.WriteFile(filepath.Join(outDir, f), []byte("audio"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Run the production cleanup helper.
-	count, err := cleanupNonChapterFiles(outDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if count != 3 {
-		t.Fatalf("expected 3 chapter files, got %d", count)
-	}
-
-	// Verify the full file was deleted.
-	if _, err := os.Stat(filepath.Join(outDir, "Pushpa 2 The Rule - Full Audio Jukebox.mp3")); !os.IsNotExist(err) {
-		t.Fatal("expected full file to be deleted")
-	}
-
-	// Verify chapter files still exist.
-	for _, f := range files[1:] {
-		if _, err := os.Stat(filepath.Join(outDir, f)); err != nil {
-			t.Fatalf("chapter file %q was deleted: %v", f, err)
-		}
+			count, err := cleanupNonChapterFiles(tmp)
+			if err != nil {
+				t.Fatalf("cleanupNonChapterFiles() error: %v", err)
+			}
+			if count != tt.wantCount {
+				t.Errorf("count = %d, want %d", count, tt.wantCount)
+			}
+			if tt.wantGone != "" {
+				if _, err := os.Stat(filepath.Join(tmp, tt.wantGone)); !os.IsNotExist(err) {
+					t.Errorf("expected %q to be deleted", tt.wantGone)
+				}
+			}
+		})
 	}
 }
 
